@@ -10,15 +10,17 @@
 #'     function values. (num mat -> num vec)
 #' @param proposal a random walk proposal that takes a matrix, and produces a
 #'     matrix of proposed states, centred on the corresponding columns of the
-#'     input matrix. (num mat -> num mat)
+#'     input matrix. It should also take in the current iteration count. ((num
+#'     mat, num) -> num mat)
 #' @param temp temperature of the current iteration. (num)
+#' @param k current iteration count. (num)
 #' @param objv an optional vector specifying the objective function values for
 #'     each column in \code{theta}. (num vec)
 #'
 #' @return a list consisting of a matrix of transitioned states, a vector of
 #'     objective function values corresponding to the transitioned states, and
 #'     the acceptance proportion (useful for diagnostic purpose).
-SAmove <- function(theta, objf, proposal, temp, objv = NULL){
+SAmove <- function(theta, objf, proposal, temp, k, objv = NULL){
 
     ## WARNING: THIS IS A MINIMISATION ALGORITHM
     ## WARNING: THIS IS A MINIMISATION ALGORITHM
@@ -32,15 +34,15 @@ SAmove <- function(theta, objf, proposal, temp, objv = NULL){
         objv <- objf(theta)
     }
 
-    ## proposal move
-    theta_t <- proposal(theta)
+    ## Proposal move
+    theta_t <- proposal(theta, k)
     objv_t <- objf(theta_t)
 
-    ## acceptance step
+    ## Acceptance step
     u <- runif(NCOL(theta), 0, 1)
     evolve <- log(u) < ((objv - objv_t) / temp)
 
-    ## update accepted states and thier objective values
+    ## Update accepted states and thier objective values
     theta[, evolve] <- theta_t[, evolve]
     objv[evolve] <- objv_t[evolve]
 
@@ -63,7 +65,8 @@ SAmove <- function(theta, objf, proposal, temp, objv = NULL){
 #'     function values. (num mat -> num vec)
 #' @param proposal a random walk proposal that takes a matrix, and produces a
 #'     matrix of proposed states, centred on the corresponding columns of the
-#'     input matrix. (num mat -> num mat)
+#'     input matrix. It should also take in the current iteration count. ((num
+#'     mat, num) -> num mat)
 #' @param starting a matrix with each column corresponding to a starting
 #'     state. This code assumes that the starting values are feasible. (num mat)
 #' @param schedule a cooling schedule, taking the current iteration count and
@@ -102,70 +105,74 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     ## Starting values should be feasible, otherwise the proposal should return
     ## infinity for infeasible starting values.
     d <- NROW(starting)
-    tht_obj <- list(objv = objf(starting))
-    minimum <- list(theta = starting[which.min(tht_obj$objv)],
-                    objv = min(tht_obj$objv))
+    tht_ls <- list(objv = objf(starting))
+    minimum <- list(theta = starting[which.min(tht_ls$objv)],
+                    objv = min(tht_ls$objv))
 
-    ## If one of the starting values is not feasible, the following code shall
-    ## be used. THIS IS NOT RECOMMENDED; PERFORMANCE WILL SUFFER.
-    ## tht_obj <- list(objv = objf(starting))
-    ## minimum <- list(theta = NA, objv = Inf)
 
+    ## Recycle the starting values if it is less than N
     if (NCOL(starting) < N) {
         idx <- rep_len(1:NCOL(starting), N)
-        tht_obj$theta <- starting[, idx, drop = FALSE]
-        tht_obj$objv <- rep_len(tht_obj$objv, N)
+        tht_ls$theta <- starting[, idx, drop = FALSE]
+        tht_ls$objv <- rep_len(tht_ls$objv, N)
     } else {
         if (NCOL(starting) > N) {
             warning("Starting values supplied exceed desired number of MC chain")
         }
-        tht_obj$theta <- starting
+        tht_ls$theta <- starting
     }
 
+    ## The previous temperature is set to infinity to make sure that the weight
+    ## calculation is correct.
     temp_prev <- Inf
-    temp_0 <- abs(minimum$objv)            # Initial temperature
-    w <- exp(-tht_obj$objv / temp_0)       # Initial weight
-    index <- sample.int(length(w), N, replace = TRUE, prob = w)
 
-    acceptance_vec <- rep(NA, iter)     # Diagnostic
-    track.rss <- vector("list", iter)   # Diagnostic
+    ## Diagnostic
+    acceptance_vec <- rep(NA, iter)
+    track_rss <- vector("list", iter)
 
     for (k in seq.int(1, iter)) {
 
-        ## Importance sampling
-        ## temp <- schedule(k, temp_0)
+        ## Get the current temperature
         temp <- schedule(k, abs(minimum$objv))
-        w <- exp(-tht_obj$objv * (1/temp - 1/temp_prev))
+
+        ## Importance sampling
+        w <- exp(-tht_ls$objv * (1/temp - 1/temp_prev))
         index <- sample.int(length(w), size = N, replace = TRUE, prob = w)
 
         ## SA move
-        tht_obj <- SAmove(tht_obj$theta[,index, drop = FALSE], objf, proposal,
-                          temp, tht_obj$objv[index])
-        min_col <- which.min(tht_obj$objv)
+        tht_ls <- SAmove(tht_ls$theta[,index, drop = FALSE], objf, proposal,
+                         temp, k, tht_ls$objv[index])
+
+        ## Look up the current best minimum
+        min_col <- which.min(tht_ls$objv)
+        if (tht_ls$objv[min_col] < minimum$objv) {
+            minimum$theta <- tht_ls$theta[, min_col]
+            minimum$objv <- tht_ls$objv[min_col]
+        }
+
+        ## Current temperature becomes the previous temperature
         temp_prev <- temp
 
         ## Diagnostic
-        acceptance_vec[k] <- tht_obj$acceptance
-        track.rss[[k]] <- tht_obj$objv
-
-        if (tht_obj$objv[min_col] < minimum$objv) {
-            minimum$theta <- tht_obj$theta[, min_col]
-            minimum$objv <- tht_obj$objv[min_col]
-        }
+        acceptance_vec[k] <- tht_ls$acceptance
+        track_rss[[k]] <- tht_ls$objv
 
         if (verbose && (k %% 10 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
         }
     }
+
+    ## Diagnostic
     if (diagnostic) {
         plot(acceptance_vec ~ seq.int(1, iter), ylim = c(0, 1),
-             pch = 20, cex = 0.5) # Diagnostic
-        boxplot(track.rss, pch = 20, cex = 0.5)
-        minimum$track.rss <- track.rss
+             pch = 20, cex = 0.5)
+        boxplot(track_rss, pch = 20, cex = 0.5)
+        minimum$track_rss <- track_rss
     }
     minimum$acc <- acceptance_vec
+
     cat('Final objective value:', minimum$objv, '\n')
-    return(minimum)
+    minimum
 
 }
 
@@ -185,7 +192,8 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
 #'     function values. (num mat -> num vec)
 #' @param proposal a random walk proposal that takes a matrix, and produces a
 #'     matrix of proposed states, centred on the corresponding columns of the
-#'     input matrix. (num mat -> num mat)
+#'     input matrix. It should also take in the current iteration count. ((num
+#'     mat, num) -> num mat)
 #' @param starting a matrix with each column corresponding to a starting
 #'     state. This code assumes that the starting values are feasible. (num mat)
 #' @param schedule a cooling schedule, taking the current iteration count and
@@ -202,8 +210,8 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
 #'     value, and the acceptance rate at each iteration.
 multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
                     diagnostic = FALSE, verbose = FALSE){
-
-    ## This is a multi-start SA starting from different states specified in 'starting'.
+    ## this is a multi-start SA starting from different states specified in
+    ## 'starting'.
 
     ## objf : objective function
     ## proposal : a random walk proposal
@@ -218,60 +226,58 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     ## Starting values should be feasible, otherwise the proposal should return
     ## infinity for infeasible starting values.
     d <- NROW(starting)
-    tht_obj <- list(objv = objf(starting))
-    minimum <- list(theta = starting[which.min(tht_obj$objv)],
-                    objv = min(tht_obj$objv))
+    tht_ls <- list(objv = objf(starting))
+    minimum <- list(theta = starting[which.min(tht_ls$objv)],
+                    objv = min(tht_ls$objv))
 
-    ## If one of the starting values is not feasible, the following code shall
-    ## be used. THIS IS NOT RECOMMENDED; PERFORMANCE WILL SUFFER.
-    ## tht_obj <- list(objv = objf(starting))
-    ## minimum <- list(theta = NA, objv = Inf)
-
-
+    ## Recycle the starting values if it is less than N
     if (NCOL(starting) < N) {
         idx <- rep_len(1:NCOL(starting), N)
-        tht_obj$theta <- starting[, idx, drop = FALSE]
-        tht_obj$objv <- rep_len(tht_obj$objv, N)
-    } else {
-        if (NCOL(starting) > N) {
-            warning("Starting values supplied exceed N")
-        }
-        tht_obj$theta <- starting
+        tht_ls$theta <- starting[, idx, drop = FALSE]
+        tht_ls$objv <- rep_len(tht_ls$objv, N)
+    } else if (NCOL(starting) > N) {
+        warning("Starting values supplied exceed N")
+        tht_ls$theta <- starting
     }
 
-    ## initialise the temperature
-    temp_0 <- abs(min(tht_obj$objv))
-
-    ## diagnostic
+    ## Diagnostic
     acceptance_vec <- rep(NA, iter)
-    track.rss <- vector("list", iter)
+    track_rss <- vector("list", iter)
 
     for (k in seq.int(1, iter)) {
-        tht_obj <- SAmove(tht_obj$theta, objf, proposal, schedule(k, temp_0),
-                          tht_obj$objv)
-        min_col <- which.min(tht_obj$objv)
 
-        ## diagnostic
-        acceptance_vec[k] <- tht_obj$acceptance
-        track.rss[[k]] <- tht_obj$objv
+        ## Get the current temperature
+        temp <- schedule(k, abs(minimum$objv))
 
-        if (tht_obj$objv[min_col] < minimum$objv) {
-            minimum$theta <- tht_obj$theta[, min_col]
-            minimum$objv <- tht_obj$objv[min_col]
+        ## SA move
+        tht_ls <- SAmove(tht_ls$theta, objf, proposal, temp, k, tht_ls$objv)
+
+        ## Look up the current best minimum
+        min_col <- which.min(tht_ls$objv)
+        if (tht_ls$objv[min_col] < minimum$objv) {
+            minimum$theta <- tht_ls$theta[, min_col]
+            minimum$objv <- tht_ls$objv[min_col]
         }
+
+        ## Diagnostic
+        acceptance_vec[k] <- tht_ls$acceptance
+        track_rss[[k]] <- tht_ls$objv
+
         if (verbose && (k %% 10 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
         }
     }
-    ## diagnostic
+
+    ## Diagnostic
     if (diagnostic) {
         plot(acceptance_vec ~ seq.int(1, iter), ylim = c(0, 1),
              pch = 20, cex = 0.5)
-        boxplot(track.rss, pch = 20, cex = 0.5)
-        minimum$track.rss <- track.rss
+        boxplot(track_rss, pch = 20, cex = 0.5)
+        minimum$track_rss <- track_rss
     }
     minimum$acc <- acceptance_vec
+
     cat('Final objective value:', minimum$objv, '\n')
-    return(minimum)
+    minimum
 }
 
