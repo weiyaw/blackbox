@@ -55,7 +55,12 @@ SAmove <- function(theta, objf, proposal, temp, k, objv = NULL){
 #' proposal distribution and a cooling schedule.
 #'
 #' The constraints are enforced by using an appropriate proposal
-#' distribution. Diagnostic plots include a boxplot of the objective function
+#' distribution. It is advisable that the proposal variance is decreased after
+#' each iteration (hence the reason the proposal distribution should take the
+#' current iteration count in addition to the current state). The iterator in
+#' this code starts from 1 to N.
+#'
+#' Diagnostic plots include a boxplot of the objective function
 #' values and a scatterplot of the acceptance probabilities, both of which are
 #' plotted for each iteration. The supplied starting values are recycled to
 #' construct \code{N} starting values.
@@ -182,10 +187,15 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
 #' locations, with a supplied proposal distribution and cooling schedule.
 #'
 #' The constraints are enforced by using an appropriate proposal
-#' distribution. Diagnostic plots include a boxplot of the objective function
-#' values and a scatterplot of the acceptance probabilities, both of which are
-#' plotted for each iteration. The supplied starting values are recycled to
-#' construct \code{N} starting values.
+#' distribution. It is advisable that the proposal variance is decreased after
+#' each iteration (hence the reason the proposal distribution should take the
+#' current iteration count in addition to the current state). The iterator in
+#' this code starts from 1 to N.
+#'
+#' Diagnostic plots include a boxplot of the objective function values and a
+#' scatterplot of the acceptance probabilities, both of which are plotted for
+#' each iteration. The supplied starting values are recycled to construct
+#' \code{N} starting values.
 #'
 #' @param objf an objective function that takes a matrix with each column
 #'     corresponds to a state, and return a vector with respective objective
