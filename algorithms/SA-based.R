@@ -140,6 +140,7 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
         ## Get the current temperature
         temp <- schedule(k, abs(minimum$objv))
 
+        if (k == 80) browser()
         ## Importance sampling
         w <- exp(-tht_ls$objv * (1/temp - 1/temp_prev))
         index <- sample.int(length(w), size = N, replace = TRUE, prob = w)
