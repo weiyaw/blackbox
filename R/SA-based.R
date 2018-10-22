@@ -1,3 +1,5 @@
+## ALL CODE FOR SA-BASED OPTIMISATION
+
 #' SA-Move (Markov kernel)
 #'
 #' Performs a Markov transition step for each state. This function is intended
@@ -140,7 +142,6 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
         ## Get the current temperature
         temp <- schedule(k, abs(minimum$objv))
 
-        if (k == 80) browser()
         ## Importance sampling
         w <- exp(-tht_ls$objv * (1/temp - 1/temp_prev))
         index <- sample.int(length(w), size = N, replace = TRUE, prob = w)
@@ -163,7 +164,7 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
         acceptance_vec[k] <- tht_ls$acceptance
         track_rss[[k]] <- tht_ls$objv
 
-        if (verbose && (k %% 10 == 0)) {
+        if (verbose && (k %% 100 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
         }
     }
@@ -274,7 +275,7 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
         acceptance_vec[k] <- tht_ls$acceptance
         track_rss[[k]] <- tht_ls$objv
 
-        if (verbose && (k %% 10 == 0)) {
+        if (verbose && (k %% 100 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
         }
     }

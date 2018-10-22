@@ -1,3 +1,5 @@
+## ALL CODE FOR GENERATING STARTING VALUES, PROPOSAL AND COOLING SCHEDULE.
+
 #' Generate feasible states
 #'
 #' Generate feasible states by constantly adding random noises to supplied

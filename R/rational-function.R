@@ -1,3 +1,5 @@
+## ALL CODES FOR FITTING LEAST SQUARES AND TUKEY BIWEIGHT RATIONAL FUNCTIONS
+
 #' Get the numerators of the derivatives of a set of rational functions.
 #'
 #' Assuming that the rational function is r(x) = f(x) / g(x), this function
@@ -304,7 +306,7 @@ rational_biweight_fac <- function(y, x, dim_f, dim_g, cst = 4.685){
     force(y)
     force(dim_f)
     force(dim_g)
-    force(c)
+    force(cst)
 
     ## Sequence of indices for both numerator and denominator
     idx_f <- seq.int(1, dim_f)
