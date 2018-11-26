@@ -1,3 +1,26 @@
+vecToMat <- function(vec, n, colwise = TRUE) {
+
+    ## Create a matrix with identical columns (or rows)
+
+    if (colwise) {
+        matrix(rep(vec, times = n), ncol = n, nrow = length(vec))
+    } else {
+        matrix(rep(vec, times = n), nrow = n, ncol = length(vec), byrow = TRUE)
+    }
+}
+
+squaredNorm <- function(mat) {
+
+    ## Compute the squared l2 norm for each column (only works for matrix!)
+
+    if (is.matrix(mat)) {
+        colSums(mat^2)
+    } else {
+        stop("Non-matrix in squaredNorm")
+    }
+}
+
+
 #' @title Update the inertia "w" for v1.
 #'
 #' @param in_boundary a boolean vector specifying whether the particles are
@@ -507,7 +530,7 @@ CEPSO <- function(starting, objf, pilot, indicator, neighbour = N/5, iter = 2000
         sw2 <- explore(sw[[2]], pilot)
         sw2 <- assess(sw2, delta, indicator)
         sw <- exchange(sw1, sw2, neighbour)
-        if (verbose && (i %% 500 == 0)) {
+        if (verbose && (i %% 200 == 0)) {
             cat(i, 'iterations done, current best:',
                 pilot_objv + sw[[1]]$gbest_objv, '\n')
         }

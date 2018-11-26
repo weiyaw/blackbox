@@ -19,6 +19,7 @@
 #'     boolean vector, each element of which corresponds to a column of the
 #'     input matrix, indicating its feasibility . (num mat -> bool vec)
 #' @param N the number of feasible states.
+#' ## @param n_pertub the number of dimensions to be updated.
 #' @param dist the distribution of the random noise. This must be a sampler such
 #'     as rnorm, rcauchy and rt. (function)
 #' @param dist.para a list of parameters used in \code{dist}. (list)
@@ -26,15 +27,17 @@
 #' @return a list consisting of a matrix of transitioned states, a vector of
 #'     objective function values corresponding to the transitioned states, and
 #'     the acceptance proportion (useful for diagnostic purpose).
-get_feasibles <- function(theta, indicator, N=NCOL(theta), dist=rcauchy,
-                          dist_para=list(scale=2)) {
+get_feasibles <- function(theta, indicator, N = NCOL(theta), #n_pertub = NROW(theta),
+                          dist = rcauchy, dist_para = list(scale=2)) {
 
     force(indicator)
     force(dist)
 
     theta <- as.matrix(theta)
-    n_dims <- nrow(theta)
-    n_theta <- ncol(theta)
+    n_dims <- NROW(theta)
+    n_theta <- NCOL(theta)
+
+    good_theta <- theta[, indicator(theta)]
 
     if (N < n_theta) {
         warning("Supplied estimates more than number of desired estimated")
@@ -46,7 +49,7 @@ get_feasibles <- function(theta, indicator, N=NCOL(theta), dist=rcauchy,
     n_theta <- ncol(theta)
 
     fea_states <- theta
-    bad <- !indicator(fea_states)
+    bad <- rep(TRUE, NCOL(theta))
 
     for (k in 1:10000) {
         ## Add noise into the matrix
@@ -58,6 +61,9 @@ get_feasibles <- function(theta, indicator, N=NCOL(theta), dist=rcauchy,
         bad[bad] <- !(indicator(fea_states[, bad, drop = FALSE]))
 
         if (!any(bad)) {
+            if (NCOL(good_theta) > 0) {
+                fea_states[, 1:NCOL(good_theta)] <- good_theta
+            }
             return(fea_states)
         }
     }
@@ -92,7 +98,7 @@ rnorm_rw_fac <- function(sd = 1, fraction = 0.97) {
         theta <- as.matrix(theta)
 
         ## Decrease standard deviations and generate noise
-        pertub <- rnorm(length(theta), sd = sd * (fraction^(k - 1)))
+        pertub <- rnorm(length(theta)) * sd * (fraction^(k - 1))
 
         theta + pertub
     }
@@ -146,7 +152,7 @@ rtnorm_rw_fac <- function(indicator, sd = 1, fraction = 0.97) {
         while (any(bad)) {
             n_bad <- sum(bad)
             ## Decrease standard deviations and generate noise
-            pertub <- rnorm(n_dims * n_bad, sd = sd * (fraction^(k - 1)))
+            pertub <- rnorm(n_dims * n_bad) * sd * (fraction^(k - 1))
 
             ## Add pertubation to the current states
             fea_states[, bad] <- theta[, bad, drop = FALSE] + pertub
@@ -156,7 +162,55 @@ rtnorm_rw_fac <- function(indicator, sd = 1, fraction = 0.97) {
     }
 }
 
+## n_pertub: number of dimensions for pertubation
+rtnorm_rw_comp_fac <- function(indicator, sd = 1, fraction = 0.97, n_pertub = 2) {
+
+    ## Evaluate the function's arguments eagerly
+    force(indicator)
+    force(fraction)
+
+    function(theta, k) {
+        ## theta must be a matrix
+        theta <- as.matrix(theta)
+
+        if (NROW(theta) < n_pertub) {
+            stop("Dim of pertub too large.")
+        }
+
+        ## Initialise final output
+        fea_states <- theta
+
+        ## Every column is bad in the beginning, to make sure that noise is
+        ## added at least once.
+        bad <- rep(TRUE, NCOL(theta))
+
+        for (i in 1:1000) {
+            idx_pertub <- sample(1:NROW(theta), n_pertub)
+            n_bad <- sum(bad)
+            ## Decrease standard deviations and generate noise
+            pertub <- rnorm(n_pertub * n_bad) * sd * (fraction^(k - 1))
+
+            ## Add pertubation to the current states
+            fea_states[idx_pertub, bad] <- theta[idx_pertub, bad, drop = FALSE] + pertub
+            bad[bad] <- !(indicator(fea_states[, bad, drop = FALSE]))
+
+            if (!any(bad)) {
+                return(fea_states)
+
+            }
+        }
+        cat("Taking too much time to get feasible proposal. Skip ", sum(bad), ".\n")
+        fea_states
+    }
+}
+
+
 recip_schedule <- function(k, T_init) {
+    ## alpha = 0.95
+    T_init / (1 + 0.95 * (k-1)^2)
+}
+
+recip_schedule_0.85 <- function(k, T_init) {
     ## alpha = 0.85
     T_init / (1 + 0.85 * (k-1)^2)
 }

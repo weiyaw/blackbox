@@ -5,7 +5,7 @@
 #' Performs a Markov transition step for each state. This function is intended
 #' for minimisation.
 #'
-#' @param theta a matrix with each column corresponding to a current state. (num
+#' @param state a matrix with each column corresponding to a current state. (num
 #'     mat)
 #' @param objf an objective function that takes a matrix with each column
 #'     corresponds to a state, and return a vector with respective objective
@@ -17,38 +17,38 @@
 #' @param temp temperature of the current iteration. (num)
 #' @param k current iteration count. (num)
 #' @param objv an optional vector specifying the objective function values for
-#'     each column in \code{theta}. (num vec)
+#'     each column in \code{state}. (num vec)
 #'
 #' @return a list consisting of a matrix of transitioned states, a vector of
 #'     objective function values corresponding to the transitioned states, and
 #'     the acceptance proportion (useful for diagnostic purpose).
-SAmove <- function(theta, objf, proposal, temp, k, objv = NULL){
+SAmove <- function(state, objf, proposal, temp, k, objv = NULL){
 
     ## WARNING: THIS IS A MINIMISATION ALGORITHM
     ## WARNING: THIS IS A MINIMISATION ALGORITHM
     ## WARNING: THIS IS A MINIMISATION ALGORITHM
 
-    if (is.vector(theta)) {
-        theta <- t(as.matrix(theta))
+
+    if (is.vector(state)) {
+        state <- t(as.matrix(state))
     }
 
     if (is.null(objv)) {
-        objv <- objf(theta)
+        objv <- objf(state)
     }
 
-    ## Proposal move
-    theta_t <- proposal(theta, k)
-    objv_t <- objf(theta_t)
+    state_t <- proposal(state, k)
+    objv_t <- objf(state_t)
 
     ## Acceptance step
-    u <- runif(NCOL(theta), 0, 1)
+    u <- runif(NCOL(state), 0, 1)
     evolve <- log(u) < ((objv - objv_t) / temp)
 
     ## Update accepted states and thier objective values
-    theta[, evolve] <- theta_t[, evolve]
+    state[, evolve] <- state_t[, evolve]
     objv[evolve] <- objv_t[evolve]
 
-    list(theta = theta, objv = objv, acceptance = mean(evolve))
+    list(state = state, objv = objv, acceptance = mean(evolve))
 }
 
 #' SMC-SA
@@ -88,6 +88,7 @@ SAmove <- function(theta, objf, proposal, temp, k, objv = NULL){
 #'
 #' @return a list that contains the best state, its objective function
 #'     value, and the acceptance rate at each iteration.
+#' @export
 SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
                   diagnostic = FALSE, verbose = FALSE) {
 
@@ -112,21 +113,22 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     ## Starting values should be feasible, otherwise the proposal should return
     ## infinity for infeasible starting values.
     d <- NROW(starting)
-    tht_ls <- list(objv = objf(starting))
-    minimum <- list(theta = starting[which.min(tht_ls$objv)],
-                    objv = min(tht_ls$objv))
+    state_ls <- list(objv = objf(starting))
+    minimum <- list(state = starting[which.min(state_ls$objv)],
+                    objv = min(state_ls$objv))
 
 
     ## Recycle the starting values if it is less than N
     if (NCOL(starting) < N) {
         idx <- rep_len(1:NCOL(starting), N)
-        tht_ls$theta <- starting[, idx, drop = FALSE]
-        tht_ls$objv <- rep_len(tht_ls$objv, N)
+        state_ls$state <- starting[, idx, drop = FALSE]
+        state_ls$objv <- rep_len(state_ls$objv, N)
     } else {
         if (NCOL(starting) > N) {
             warning("Starting values supplied exceed desired number of MC chain")
         }
-        tht_ls$theta <- starting
+        state_ls$state <- starting
+        N <- NCOL(state_ls$state)
     }
 
     ## The previous temperature is set to infinity to make sure that the weight
@@ -134,35 +136,43 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     temp_prev <- Inf
 
     ## Diagnostic
-    acceptance_vec <- rep(NA, iter)
-    track_rss <- vector("list", iter)
+    acceptance_vec <- rep(0.5, iter)
+    track_log_rss <- vector("list", iter)
 
     for (k in seq.int(1, iter)) {
 
         ## Get the current temperature
         temp <- schedule(k, abs(minimum$objv))
 
+        ## if (k > 200) {cat(k)}
+
         ## Importance sampling
-        w <- exp(-tht_ls$objv * (1/temp - 1/temp_prev))
-        index <- sample.int(length(w), size = N, replace = TRUE, prob = w)
+        log_w <- -state_ls$objv * (1/temp - 1/temp_prev)
+        ## w <- exp(-state_ls$objv * (1/temp - 1/temp_prev))
+
+        index <- sample.int(length(log_w), size = N, replace = TRUE,
+                            prob = exp(log_w + min(abs(log_w))))
 
         ## SA move
-        tht_ls <- SAmove(tht_ls$theta[,index, drop = FALSE], objf, proposal,
-                         temp, k, tht_ls$objv[index])
+        state_ls <- SAmove(state_ls$state[,index, drop = FALSE], objf, proposal,
+                         temp, k, state_ls$objv[index])
 
         ## Look up the current best minimum
-        min_col <- which.min(tht_ls$objv)
-        if (tht_ls$objv[min_col] < minimum$objv) {
-            minimum$theta <- tht_ls$theta[, min_col]
-            minimum$objv <- tht_ls$objv[min_col]
+        min_col <- which.min(state_ls$objv)
+        if (state_ls$objv[min_col] < minimum$objv) {
+            minimum$state <- state_ls$state[, min_col]
+            minimum$objv <- state_ls$objv[min_col]
+            ## if (verbose) {
+            ##     cat("At ", k, " iteration, ", minimum$objv, "\n")
+            ## }
         }
 
         ## Current temperature becomes the previous temperature
         temp_prev <- temp
 
         ## Diagnostic
-        acceptance_vec[k] <- tht_ls$acceptance
-        track_rss[[k]] <- tht_ls$objv
+        acceptance_vec[k] <- state_ls$acceptance
+        track_log_rss[[k]] <- log(state_ls$objv)
 
         if (verbose && (k %% 100 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
@@ -173,12 +183,14 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     if (diagnostic) {
         plot(acceptance_vec ~ seq.int(1, iter), ylim = c(0, 1),
              pch = 20, cex = 0.5)
-        boxplot(track_rss, pch = 20, cex = 0.5)
-        minimum$track_rss <- track_rss
+        ## boxplot(track_log_rss, pch = 20, cex = 0.5)
+        ## minimum$track_log_rss <- track_log_rss
     }
     minimum$acc <- acceptance_vec
 
-    cat('Final objective value:', minimum$objv, '\n')
+    if (verbose) {
+        cat('Final objective value:', minimum$objv, '\n')
+    }
     minimum
 
 }
@@ -220,6 +232,7 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
 #'
 #' @return a list that contains the best state, its objective function
 #'     value, and the acceptance rate at each iteration.
+#' @export
 multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
                     diagnostic = FALSE, verbose = FALSE){
     ## this is a multi-start SA starting from different states specified in
@@ -238,23 +251,23 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     ## Starting values should be feasible, otherwise the proposal should return
     ## infinity for infeasible starting values.
     d <- NROW(starting)
-    tht_ls <- list(objv = objf(starting))
-    minimum <- list(theta = starting[which.min(tht_ls$objv)],
-                    objv = min(tht_ls$objv))
+    state_ls <- list(objv = objf(starting))
+    minimum <- list(state = starting[which.min(state_ls$objv)],
+                    objv = min(state_ls$objv))
 
     ## Recycle the starting values if it is less than N
     if (NCOL(starting) < N) {
         idx <- rep_len(1:NCOL(starting), N)
-        tht_ls$theta <- starting[, idx, drop = FALSE]
-        tht_ls$objv <- rep_len(tht_ls$objv, N)
+        state_ls$state <- starting[, idx, drop = FALSE]
+        state_ls$objv <- rep_len(state_ls$objv, N)
     } else if (NCOL(starting) > N) {
         warning("Starting values supplied exceed N")
-        tht_ls$theta <- starting
+        state_ls$state <- starting
     }
 
     ## Diagnostic
     acceptance_vec <- rep(NA, iter)
-    track_rss <- vector("list", iter)
+    track_log_rss <- vector("list", iter)
 
     for (k in seq.int(1, iter)) {
 
@@ -262,18 +275,18 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
         temp <- schedule(k, abs(minimum$objv))
 
         ## SA move
-        tht_ls <- SAmove(tht_ls$theta, objf, proposal, temp, k, tht_ls$objv)
+        state_ls <- SAmove(state_ls$state, objf, proposal, temp, k, state_ls$objv)
 
         ## Look up the current best minimum
-        min_col <- which.min(tht_ls$objv)
-        if (tht_ls$objv[min_col] < minimum$objv) {
-            minimum$theta <- tht_ls$theta[, min_col]
-            minimum$objv <- tht_ls$objv[min_col]
+        min_col <- which.min(state_ls$objv)
+        if (state_ls$objv[min_col] < minimum$objv) {
+            minimum$state <- state_ls$state[, min_col]
+            minimum$objv <- state_ls$objv[min_col]
         }
 
         ## Diagnostic
-        acceptance_vec[k] <- tht_ls$acceptance
-        track_rss[[k]] <- tht_ls$objv
+        acceptance_vec[k] <- state_ls$acceptance
+        track_log_rss[[k]] <- log(state_ls$objv)
 
         if (verbose && (k %% 100 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
@@ -284,12 +297,15 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     if (diagnostic) {
         plot(acceptance_vec ~ seq.int(1, iter), ylim = c(0, 1),
              pch = 20, cex = 0.5)
-        boxplot(track_rss, pch = 20, cex = 0.5)
-        minimum$track_rss <- track_rss
+        ## boxplot(track_log_rss, pch = 20, cex = 0.5)
+        ## minimum$track_log_rss <- track_log_rss
     }
     minimum$acc <- acceptance_vec
 
-    cat('Final objective value:', minimum$objv, '\n')
+    if (verbose) {
+        cat('Final objective value:', minimum$objv, '\n')
+    }
     minimum
 }
+
 

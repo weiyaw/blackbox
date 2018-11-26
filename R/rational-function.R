@@ -321,9 +321,11 @@ rational_biweight_fac <- function(y, x, dim_f, dim_g, cst = 4.685){
     }
 
     ## The biweight function (integration of phi)
+    ## x is a matrix
     rho <- function(x, cst = 4.685){
-        res <- abs(x) > cst
-        res[!res] <- (cst^2)/6 * (1-(1-(x[!res]/cst)^2)^3)
+        res <- matrix((cst^2)/6, NROW(x), NCOL(x))
+        outside <- abs(x) > cst
+        res[!outside] <- (cst^2)/6 * (1-(1-(x[!outside]/cst)^2)^3)
         return(res)
     }
 
