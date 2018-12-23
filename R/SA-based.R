@@ -117,6 +117,9 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     minimum <- list(state = starting[which.min(state_ls$objv)],
                     objv = min(state_ls$objv))
 
+    ## records best objv at 50, 100, 200, 400, 600, 1000, 2000, 3000
+    minimum$records <- rep(NA, length = 8)
+    names(minimum$records) <- c(50, 100, 200, 400, 600, 1000, 2000, 3000)
 
     ## Recycle the starting values if it is less than N
     if (NCOL(starting) < N) {
@@ -177,6 +180,13 @@ SMCSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
         if (verbose && (k %% 100 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
         }
+
+        ## records best objv at 50, 100, 200, 400, 600, 1000, 2000, 3000
+        if (k %in% c(50, 100, 200, 400, 600, 1000, 2000, 3000)) {
+            minimum$records[paste(k)] <- minimum$objv
+        }
+
+        minimum
     }
 
     ## Diagnostic
@@ -255,13 +265,19 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
     minimum <- list(state = starting[which.min(state_ls$objv)],
                     objv = min(state_ls$objv))
 
+    ## records best objv at 50, 100, 200, 400, 600, 1000, 2000, 3000
+    minimum$records <- rep(NA, length = 8)
+    names(minimum$records) <- c(50, 100, 200, 400, 600, 1000, 2000, 3000)
+
     ## Recycle the starting values if it is less than N
     if (NCOL(starting) < N) {
         idx <- rep_len(1:NCOL(starting), N)
         state_ls$state <- starting[, idx, drop = FALSE]
         state_ls$objv <- rep_len(state_ls$objv, N)
-    } else if (NCOL(starting) > N) {
-        warning("Starting values supplied exceed N")
+    } else {
+        if (NCOL(starting) > N) {
+            warning("Starting values supplied exceed desired number of MC chain")
+        }
         state_ls$state <- starting
     }
 
@@ -290,6 +306,11 @@ multiSA <- function(objf, proposal, starting, schedule, N = 1000, iter = 100,
 
         if (verbose && (k %% 100 == 0)) {
             cat(k, 'iterations done, current best:', minimum$objv, '\n')
+        }
+
+        ## records best objv at 50, 100, 200, 400, 600, 1000, 2000, 3000
+        if (k %in% c(50, 100, 200, 400, 600, 1000, 2000, 3000)) {
+            minimum$records[paste(k)] <- minimum$objv
         }
     }
 

@@ -4,19 +4,17 @@
 load_all()
 
 ## fit a rational model f(x) = (a + b*x + c*x^2) / (1 + d*x + e*x^2), subject to constraint
-## no scaling
-scaled_ht1 <- HT1
+## no scaling on the dataset.
 
 ## visualise the dataset
-plot(y ~ x, data = scaled_ht1, main = "HT1",
-     cex = 1.3, cex.lab = 1.3, cex.axis = 1.3)
+plot(y ~ x, data = ht1, main = "HT1", cex = 1.3, cex.lab = 1.3, cex.axis = 1.3)
 
 ## construct the loss functions and an indicator
-loss <- rational_biweight_fac(scaled_ht1$y, scaled_ht1$x, 3L, 2L, cst = 1)
-is_monotone <- is_monotones_fac(3L, 2L, min(scaled_ht1$x), max(scaled_ht1$x), TRUE)
+loss <- rational_biweight_fac(ht1$y, ht1$x, 3L, 2L, cst = 1)
+is_monotone <- is_monotones_fac(3L, 2L, min(ht1$x), max(ht1$x), TRUE)
 
 ## get a starting value using the rearrange and regress method
-rar_ht1 <- coef(lm(y ~ x + I(x^2) + I(-x*y) + I(-x^2*y), scaled_ht1))
+rar_ht1 <- coef(lm(y ~ x + I(x^2) + I(-x*y) + I(-x^2*y), ht1))
 names(rar_ht1) <- letters[1:5]
 
 library(doParallel)
@@ -38,6 +36,23 @@ cat("RECIP DONE.", recip_time[3], "\n")
 saveRDS(recip_ht1, "~/Dropbox/honours/extras/ht1/recip_ht1.rds")
 ## plot_rat(rm1$state[1:3], c(1, rm1$state[4:5]), col = 'red')
 
+recip85_time <- system.time(recip85_ht1 <- foreach(i = 1:40) %dopar% {
+    ## randomly generate 1000 starting values arounf rar_ht1
+    set.seed(300 + i)
+    starting <- get_feasibles(rar_ht1, is_monotone, 1000, dist_para = list(scale = 2))
+
+    ## SMCSA, reciprocal, fraction = 0.97, sd = 1, 500 iter, N = 3000, 2 comp
+    ## Use a more aggresive proposal
+    rtnorm_rw <- rtnorm_rw_comp_fac(is_monotone, sd = 1, fraction = 0.97, n_pertub = 2)
+    runtime <- system.time(rm1 <- SMCSA(loss, rtnorm_rw, starting, recip_schedule_0.85, 3000, 1000, FALSE, TRUE))
+    rm1$runtime <- runtime
+    rm1
+})
+cat("RECIP DONE.", recip85_time[3], "\n")
+saveRDS(recip85_ht1, "~/Dropbox/honours/extras/ht1/recip85_ht1.rds")
+## plot_rat(rm1$state[1:3], c(1, rm1$state[4:5]), col = 'red')
+
+
 
 log_time <- system.time(log_ht1 <- foreach(i = 1:40) %dopar% {
     ## randomly generate 1000 starting values arounf rar_ht1
@@ -56,7 +71,7 @@ saveRDS(log_ht1, "~/Dropbox/honours/extras/ht1/log_ht1.rds")
 
 
 ht1_pilot <- coef(nls(y ~ (a + b*x + c*x^2) / (1 + d*x + e*I(x^2)),
-                        scaled_ht1, start = rar_ht1))
+                        ht1, start = rar_ht1))
 
 cepso_time <- system.time(cepso_ht1 <- foreach(i = 1:40) %dopar% {
     ## randomly generate 1000 starting values arounf rar_ht1
@@ -122,10 +137,10 @@ saveRDS(cepso_ht1, "~/Dropbox/honours/extras/ht1/cepso_ht1.rds")
 ## ######## Now we fit a unconstrained model with Tukey biweight and 'ht1'. ########
 ## ## Fit a rational model f(x) = (a + b*x) / (1 + c*x + d*x^2), subject to constraint
 ## ## Construct loss functions and an indicator
-## loss <- rational_biweight_fac(scaled_ht1$y, scaled_ht1$x, 3L, 2L)
+## loss <- rational_biweight_fac(ht1$y, ht1$x, 3L, 2L)
 
 ## ## Get starting values using the rearrange and regress method
-## rar_ht1 <- coef(lm(y ~ x + I(-x*y) + I(-x^2*y), scaled_ht1))
+## rar_ht1 <- coef(lm(y ~ x + I(-x*y) + I(-x^2*y), ht1))
 ## names(rar_ht1) <- letters[1:4]
 
 ## ## Randomly generate 1000 starting values arounf rar_ht1
@@ -148,22 +163,22 @@ saveRDS(cepso_ht1, "~/Dropbox/honours/extras/ht1/cepso_ht1.rds")
 
 
 
-## scaled_ht1 <- as.data.frame(scale(HT1, FALSE, apply(HT1, 2, max)))
-## plot(y ~ x, data = scaled_ht1, main = "HT1",
+## ht1 <- as.data.frame(scale(HT1, FALSE, apply(HT1, 2, max)))
+## plot(y ~ x, data = ht1, main = "HT1",
 ##      cex = 1.3, cex.lab = 1.3, cex.axis = 1.3)
 
 
 ## ######## Now we fit a constrained model with Tukey biweight and 'ht1'. ########
 ## ## Fit a rational model f(x) = (a + b*x + c*x^2) / (1 + d*x + e*x^2), subject to constraint
 ## ## Construct loss functions, indicator, and proposal distribution
-## loss <- rational_biweight_fac(scaled_ht1$y, scaled_ht1$x, 3L, 2L, c = 1)
-## is_monotone <- is_monotones_fac(3L, 2L, min(scaled_ht1$x), max(scaled_ht1$x), TRUE)
+## loss <- rational_biweight_fac(ht1$y, ht1$x, 3L, 2L, c = 1)
+## is_monotone <- is_monotones_fac(3L, 2L, min(ht1$x), max(ht1$x), TRUE)
 ## ## is_monotone <- function(x) {rep(TRUE, length = NCOL(x))}
 
 ## ## Get starting values using the rearrange and regress method
-## rar_ht1 <- coef(lm(y ~ x + I(x^2) + I(-x*y) + I(-x^2*y), scaled_ht1))
+## rar_ht1 <- coef(lm(y ~ x + I(x^2) + I(-x*y) + I(-x^2*y), ht1))
 ## names(rar_ht1) <- letters[1:5]
-## ## rar_ht1 <- coef(lm(y ~ x + I(-x*y) + I(-x^2*y), scaled_ht1))
+## ## rar_ht1 <- coef(lm(y ~ x + I(-x*y) + I(-x^2*y), ht1))
 ## ## rar_ht1 <- rep(1, length = 4)
 ## ## names(rar_ht1) <- letters[1:4]
 
@@ -181,7 +196,7 @@ saveRDS(cepso_ht1, "~/Dropbox/honours/extras/ht1/cepso_ht1.rds")
 ## rm2_cbiw_out <- SMCSA(loss, rtnorm_rw, starting, log_schedule, 1000, 3000, FALSE, TRUE)
 
 ## ht1_pilot <- coef(nls(y ~ (a + b*x) / (1 + c*x + d*I(x^2)),
-##                       scaled_ht1, start = rar_ht1))
+##                       ht1, start = rar_ht1))
 ## plot_rat(ht1_pilot[1:2], c(1, ht1_pilot[3:4]), col = 'red')
 
 ## ## Plot the results

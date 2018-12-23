@@ -523,6 +523,11 @@ CEPSO <- function(starting, objf, pilot, indicator, neighbour = N/5, iter = 2000
     sw2 <- initSwarm(starting[, -1, drop=FALSE], delta, indicator)
     sw <- exchange(sw1, sw2, neighbour)
 
+
+    ## records best objf at 50, 100, 200, 400, 600, 1000, 2000, 3000
+    records <- rep(NA, length = 8)
+    names(records) <- c(50, 100, 200, 400, 600, 1000, 2000, 3000)
+
     ## iterates
     for (i in seq(1, iter)) {
         sw1 <- exploit(sw[[1]], pilot)
@@ -534,8 +539,14 @@ CEPSO <- function(starting, objf, pilot, indicator, neighbour = N/5, iter = 2000
             cat(i, 'iterations done, current best:',
                 pilot_objv + sw[[1]]$gbest_objv, '\n')
         }
+
+        ## records best objf at 50, 100, 200, 400, 600, 1000, 2000, 3000
+        if (i %in% c(50, 100, 200, 400, 600, 1000, 2000, 3000)) {
+            records[paste(i)] <- pilot_objv + sw[[1]]$gbest_objv
+    }
+
     }
     final_objv <- pilot_objv + sw[[1]]$gbest_objv
     cat('Final objective value:', final_objv, '\n')
-    return(list(theta = sw[[1]]$gbest, objv = final_objv))
+    return(list(theta = sw[[1]]$gbest, objv = final_objv, records = records))
 }

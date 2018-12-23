@@ -41,6 +41,23 @@ cat("RECIP DONE.", recip_time[3], "\n")
 ## plot_rat(rm1$state[1:3], c(1, rm1$state[4:5]), col = 'red')
 saveRDS(recip_melon, "~/Dropbox/honours/extras/melon/recip_melon.rds")
 
+recip85_time <- system.time(recip85_melon <- foreach(i = 1:40) %dopar% {
+  ## Randomly generate 1000 starting values arounf rar_hyper
+  set.seed(100 + i)
+  starting <- get_feasibles(rar_melon, is_monotone, 1000, dist_para = list(scale = 2))
+  
+  ## SMCSA, reciprocal, fraction = 0.97, sd = 1, 500 iter, N = 3000, 2 comp
+  ## Use a more aggresive proposal
+  rtnorm_rw <- rtnorm_rw_comp_fac(is_monotone, sd = 1, fraction = 0.97, n_pertub = 2)
+  runtime <- system.time(rm1 <- SMCSA(loss, rtnorm_rw, starting, recip_schedule_0.85, 3000, 1000, FALSE, TRUE))
+  rm1$runtime <- runtime
+  rm1
+})
+cat("RECIP DONE.", recip85_time[3], "\n")
+## plot_rat(rm1$state[1:3], c(1, rm1$state[4:5]), col = 'red')
+saveRDS(recip85_melon, "~/Dropbox/honours/extras/melon/recip85_melon.rds")
+
+
 log_time <- system.time(log_melon <- foreach(i = 1:40) %dopar% {
   ## Randomly generate 1000 starting values arounf rar_hyper
   set.seed(100 + i)
