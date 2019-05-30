@@ -106,6 +106,24 @@ cat("RECIP DONE.", recip_time[3], "\n")
 # lines((Bmat %*% bs1$state) ~ scaled_lidar$range, col = 'red')
 saveRDS(recip_lidar, "~/Dropbox/honours/extras/lidar/recip_lidar.rds")
 
+recip85_time <- system.time(recip85_lidar <- foreach(i = 1:40) %dopar% {
+  ## Randomly generate 1000 starting values arounf rar_hyper
+  set.seed(500 + i)
+  starting <- get_feasibles(rand_eta, is_beta_decreasing, 1000, dist_para = list(scale = 2))
+  
+  ## SMCSA, reciprocal, fraction = 0.97, sd = 1, 500 iter, N = 3000, 2 comp
+  ## Use a more aggresive proposal
+  rtnorm_rw <- rtnorm_rw_comp_fac(is_beta_decreasing, sd = 1, fraction = 0.97, n_pertub = 2)
+  runtime <- system.time(bs1 <- SMCSA(loss, rtnorm_rw, starting, recip_schedule_0.85, 3000, 1000, FALSE, TRUE))
+  bs1$runtime <- runtime
+  bs1
+})
+cat("RECIP DONE.", recip85_time[3], "\n")
+# plot(y ~ range, data = scaled_lidar, main = "Light Detection and Ranging (LIDAR)",
+#      cex = 1.3, cex.lab = 1.3, cex.axis = 1.3)
+# lines((Bmat %*% bs1$state) ~ scaled_lidar$range, col = 'red')
+saveRDS(recip85_lidar, "~/Dropbox/honours/extras/lidar/recip85_lidar.rds")
+
 
 log_time <- system.time(log_lidar <- foreach(i = 1:40) %dopar% {
   ## Randomly generate 1000 starting values arounf rar_hyper
